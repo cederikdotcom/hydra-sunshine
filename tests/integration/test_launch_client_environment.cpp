@@ -51,11 +51,7 @@ TEST(LaunchClientEnvironmentTest, PrepAndUndoReceiveEachLaunchOwnerWithoutStaleI
   app.id = "1";
   app.name = "Identity hook test";
   app.working_dir = output.parent_path().string();
-  app.prep_cmds.push_back({
-    R"(powershell.exe -NoProfile -NonInteractive -Command "[IO.File]::AppendAllText($env:HYDRA_TEST_OUTPUT, 'do:' + $env:SUNSHINE_CLIENT_UUID + [Environment]::NewLine)")",
-    R"(powershell.exe -NoProfile -NonInteractive -Command "[IO.File]::AppendAllText($env:HYDRA_TEST_OUTPUT, 'undo:' + $env:SUNSHINE_CLIENT_UUID + [Environment]::NewLine)")",
-    false
-  });
+  app.prep_cmds.push_back({R"cmd(powershell.exe -NoProfile -NonInteractive -Command "[IO.File]::AppendAllText($env:HYDRA_TEST_OUTPUT, 'do:' + $env:SUNSHINE_CLIENT_UUID + [Environment]::NewLine)")cmd", R"cmd(powershell.exe -NoProfile -NonInteractive -Command "[IO.File]::AppendAllText($env:HYDRA_TEST_OUTPUT, 'undo:' + $env:SUNSHINE_CLIENT_UUID + [Environment]::NewLine)")cmd", false});
   proc::proc_t process {std::move(env), {app}};
   const auto terminate = util::fail_guard([&]() {
     process.terminate();
