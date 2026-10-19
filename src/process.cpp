@@ -152,6 +152,10 @@ namespace proc {
     // Add Stream-specific environment variables
     _env["SUNSHINE_APP_ID"] = std::to_string(_app_id);
     _env["SUNSHINE_APP_NAME"] = _app.name;
+    // Hooks must identify the requesting Moonlight client, not the server UUID.
+    // Overwrite on every launch, including an empty ID, so a previous owner
+    // cannot leak into the next session's prep or undo commands.
+    _env["SUNSHINE_CLIENT_UUID"] = launch_session->unique_id;
     _env["SUNSHINE_CLIENT_WIDTH"] = std::to_string(launch_session->width);
     _env["SUNSHINE_CLIENT_HEIGHT"] = std::to_string(launch_session->height);
     _env["SUNSHINE_CLIENT_FPS"] = std::to_string(launch_session->fps);

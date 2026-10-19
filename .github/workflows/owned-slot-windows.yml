@@ -1,0 +1,62 @@
+name: Owned slot Windows artifact
+on:
+  push:
+    branches: [fork/owned-slot-client-uuid]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: owned-slot-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      BUILD_VERSION: 2025.924.154138-hydra.844-owned-slots
+      BRANCH: fork/owned-slot-client-uuid
+      COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ucrt64
+          update: true
+          install: >-
+            git wget mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-cppwinrt mingw-w64-ucrt-x86_64-curl-winssl
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-MinHook
+            mingw-w64-ucrt-x86_64-miniupnpc mingw-w64-ucrt-x86_64-nlohmann-json
+            mingw-w64-ucrt-x86_64-nodejs mingw-w64-ucrt-x86_64-nsis
+            mingw-w64-ucrt-x86_64-onevpl mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-opus mingw-w64-ucrt-x86_64-toolchain
+      - name: Configure and compile Windows binaries
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_DOCS=OFF -DBUILD_TESTS=ON -DBUILD_WERROR=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSUNSHINE_ASSETS_DIR=assets
+          cmake --build build --parallel 4
+      - name: Verify client identity reaches lifecycle hooks
+        working-directory: build/tests
+        run: ./test_sunshine.exe --gtest_filter=LaunchClientEnvironmentTest.* --gtest_output=xml:owned-slot-tests.xml
+      - name: Package portable Windows candidate
+        run: |
+          mkdir -p artifacts
+          (cd build && cpack -G ZIP)
+          cp build/cpack_artifacts/Sunshine.zip artifacts/Sunshine-Windows-AMD64-owned-slots.zip
+          cp build/tests/owned-slot-tests.xml artifacts/
+          printf '{"commit":"%s","version":"%s","scope":"Windows test artifact; no global release"}\n' "$COMMIT" "$BUILD_VERSION" > artifacts/manifest.json
+          (cd artifacts && sha256sum Sunshine-Windows-AMD64-owned-slots.zip > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sunshine-owned-slots-windows-${{ github.sha }}
+          path: |
+            artifacts/
+            build/tests/owned-slot-tests.xml
+            build/tests/test_sunshine.log
+          if-no-files-found: warn
