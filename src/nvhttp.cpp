@@ -908,6 +908,9 @@ namespace nvhttp {
     );
     tree.put("root.gamesession", 1);
 
+    if (config::audio.capture_mode == "process") {
+      launch_session->audio_capture_target = proc::proc.get_audio_capture_target();
+    }
     rtsp_stream::launch_session_raise(launch_session);
 
     // Stream was started successfully, we will revert the config when the app or session terminates
@@ -998,6 +1001,9 @@ namespace nvhttp {
     );
     tree.put("root.resume", 1);
 
+    if (config::audio.capture_mode == "process") {
+      launch_session->audio_capture_target = proc::proc.get_audio_capture_target();
+    }
     rtsp_stream::launch_session_raise(launch_session);
   }
 

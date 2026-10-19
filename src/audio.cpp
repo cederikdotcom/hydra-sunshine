@@ -182,7 +182,7 @@ namespace audio {
     }
 
     // Only the first to start a session may change the default sink
-    if (!ref->sink_flag->exchange(true, std::memory_order_acquire)) {
+    if (config::audio.capture_mode != "process" && !ref->sink_flag->exchange(true, std::memory_order_acquire)) {
       // If the selected sink is different than the current one, change sinks.
       ref->restore_sink = ref->sink.host != *sink;
       if (ref->restore_sink) {
@@ -193,7 +193,18 @@ namespace audio {
     }
 
     auto frame_size = config.packetDuration * stream.sampleRate / 1000;
-    auto mic = control->microphone(stream.mapping, stream.channelCount, stream.sampleRate, frame_size);
+    auto make_microphone = [&]() -> std::unique_ptr<platf::mic_t> {
+      if (config::audio.capture_mode == "process") {
+        auto pid = config.capture_target ? config.capture_target() : std::nullopt;
+        if (!pid) {
+          BOOST_LOG(error) << "Process audio capture requires one tracked application process tree";
+          return nullptr;
+        }
+        return control->microphone_for_process(stream.mapping, stream.channelCount, stream.sampleRate, frame_size, *pid);
+      }
+      return control->microphone(stream.mapping, stream.channelCount, stream.sampleRate, frame_size);
+    };
+    auto mic = make_microphone();
     if (!mic) {
       return;
     }
@@ -230,7 +241,7 @@ namespace audio {
           BOOST_LOG(info) << "Reinitializing audio capture"sv;
           mic.reset();
           do {
-            mic = control->microphone(stream.mapping, stream.channelCount, stream.sampleRate, frame_size);
+            mic = make_microphone();
             if (!mic) {
               BOOST_LOG(warning) << "Couldn't re-initialize audio input"sv;
             }
@@ -254,6 +265,9 @@ namespace audio {
       return false;
     }
 
+    if (config::audio.capture_mode == "process") {
+      return true;
+    }
     const std::string &sink = ctx.sink.host.empty() ? config::audio.sink : ctx.sink.host;
     if (sink.empty()) {
       return false;
@@ -286,6 +300,11 @@ namespace audio {
     ctx.restore_sink = false;
 
     if (!(ctx.control = platf::audio_control())) {
+      return 0;
+    }
+
+    if (config::audio.capture_mode == "process") {
+      fg.disable();
       return 0;
     }
 

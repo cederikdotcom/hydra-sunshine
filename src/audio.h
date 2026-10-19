@@ -48,6 +48,8 @@ namespace audio {
       MAX_FLAGS  ///< Maximum number of flags
     };
 
+    std::function<std::optional<std::uint32_t>()> capture_target;
+
     int packetDuration;
     int channels;
     int mask;

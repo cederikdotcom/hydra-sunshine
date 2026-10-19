@@ -24,6 +24,7 @@ namespace rtsp_stream {
     uint32_t control_connect_data;
 
     bool host_audio;
+    std::function<std::optional<std::uint32_t>()> audio_capture_target;
     std::string unique_id;
     int width;
     int height;

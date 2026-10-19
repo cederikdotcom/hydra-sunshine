@@ -825,6 +825,25 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### audio_capture_mode
+
+Windows audio source: `device` (default) captures system audio; `process` captures
+only the launched application's process tree. Process mode requires Windows build
+20348 or later. It does not change the default render device, install audio drivers,
+or fall back to the system mix if activation fails. Set `stream_audio = enabled`
+to transmit captured audio.
+
+The application must remain in Sunshine's tracked Windows job. Desktop sessions,
+detached applications, and jobs containing multiple independent process roots have
+no unambiguous capture target and produce no audio. An Unreal launcher may exit;
+the remaining game process is selected from the same job on capture startup or
+reinitialization. Existing device mode behavior remains the default on all platforms.
+
+```ini
+audio_capture_mode = process
+stream_audio = enabled
+```
+
 ### stream_audio
 
 <table>

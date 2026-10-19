@@ -16,6 +16,7 @@
 #include <synchapi.h>
 
 // local includes
+#include "audio_process_loopback.h"
 #include "misc.h"
 #include "src/config.h"
 #include "src/logging.h"
@@ -447,7 +448,7 @@ namespace platf::audio {
       return capture_e::ok;
     }
 
-    int init(std::uint32_t sample_rate, std::uint32_t frame_size, std::uint32_t channels_out) {
+    int init(std::uint32_t sample_rate, std::uint32_t frame_size, std::uint32_t channels_out, DWORD process_id = 0) {
       audio_event.reset(CreateEventA(nullptr, FALSE, FALSE, nullptr));
       if (!audio_event) {
         BOOST_LOG(error) << "Couldn't create Event handle"sv;
@@ -457,46 +458,71 @@ namespace platf::audio {
 
       HRESULT status;
 
-      status = CoCreateInstance(
-        CLSID_MMDeviceEnumerator,
-        nullptr,
-        CLSCTX_ALL,
-        IID_IMMDeviceEnumerator,
-        (void **) &device_enum
-      );
+      if (process_id) {
+        process_com = std::make_unique<co_init_t>();
+        status = activate_process_loopback(process_id, &audio_client);
+        if (FAILED(status)) {
+          BOOST_LOG(error) << "Process audio activation failed for PID " << process_id << ": 0x" << util::hex(status).to_string_view();
+          return -1;
+        }
+        auto format = std::find_if(formats.begin(), formats.end(), [channels_out](const auto &candidate) {
+          return candidate.channel_count == channels_out;
+        });
+        if (format == formats.end()) {
+          return -1;
+        }
+        auto waveformat = create_waveformat(sample_format_e::f32, format->channel_count, format->capture_waveformat_channel_mask);
+        waveformat.Format.nSamplesPerSec = sample_rate;
+        waveformat.Format.nAvgBytesPerSec = sample_rate * waveformat.Format.nBlockAlign;
+        status = audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 0, 0, reinterpret_cast<WAVEFORMATEX *>(&waveformat), nullptr);
+        if (FAILED(status)) {
+          BOOST_LOG(error) << "Process audio initialization failed: 0x" << util::hex(status).to_string_view();
+          return -1;
+        }
+        channels = channels_out;
+        BOOST_LOG(info) << "Capturing application process tree PID " << process_id;
+      } else {
+        status = CoCreateInstance(
+          CLSID_MMDeviceEnumerator,
+          nullptr,
+          CLSCTX_ALL,
+          IID_IMMDeviceEnumerator,
+          (void **) &device_enum
+        );
 
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "Couldn't create Device Enumerator [0x"sv << util::hex(status).to_string_view() << ']';
+        if (FAILED(status)) {
+          BOOST_LOG(error) << "Couldn't create Device Enumerator [0x"sv << util::hex(status).to_string_view() << ']';
 
-        return -1;
-      }
-
-      status = device_enum->RegisterEndpointNotificationCallback(&endpt_notification);
-      if (FAILED(status)) {
-        BOOST_LOG(error) << "Couldn't register endpoint notification [0x"sv << util::hex(status).to_string_view() << ']';
-
-        return -1;
-      }
-
-      auto device = default_device(device_enum);
-      if (!device) {
-        return -1;
-      }
-
-      for (const auto &format : formats) {
-        if (format.channel_count != channels_out) {
-          BOOST_LOG(debug) << "Skipping audio format ["sv << format.name << "] with channel count ["sv
-                           << format.channel_count << " != "sv << channels_out << ']';
-          continue;
+          return -1;
         }
 
-        BOOST_LOG(debug) << "Trying audio format ["sv << format.name << ']';
-        audio_client = make_audio_client(device, format);
+        status = device_enum->RegisterEndpointNotificationCallback(&endpt_notification);
+        if (FAILED(status)) {
+          BOOST_LOG(error) << "Couldn't register endpoint notification [0x"sv << util::hex(status).to_string_view() << ']';
 
-        if (audio_client) {
-          BOOST_LOG(debug) << "Found audio format ["sv << format.name << ']';
-          channels = channels_out;
-          break;
+          return -1;
+        }
+
+        auto device = default_device(device_enum);
+        if (!device) {
+          return -1;
+        }
+
+        for (const auto &format : formats) {
+          if (format.channel_count != channels_out) {
+            BOOST_LOG(debug) << "Skipping audio format ["sv << format.name << "] with channel count ["sv
+                             << format.channel_count << " != "sv << channels_out << ']';
+            continue;
+          }
+
+          BOOST_LOG(debug) << "Trying audio format ["sv << format.name << ']';
+          audio_client = make_audio_client(device, format);
+
+          if (audio_client) {
+            BOOST_LOG(debug) << "Found audio format ["sv << format.name << ']';
+            channels = channels_out;
+            break;
+          }
         }
       }
 
@@ -505,9 +531,13 @@ namespace platf::audio {
         return -1;
       }
 
-      REFERENCE_TIME default_latency;
-      audio_client->GetDevicePeriod(&default_latency, nullptr);
-      default_latency_ms = default_latency / 1000;
+      // Process loopback does not implement GetDevicePeriod. Keep a bounded
+      // event wait even on that device; do not use an uninitialized duration.
+      REFERENCE_TIME default_latency = 200000;
+      if (FAILED(audio_client->GetDevicePeriod(&default_latency, nullptr))) {
+        default_latency = 200000;
+      }
+      default_latency_ms = std::max<REFERENCE_TIME>(1, default_latency / 10000);
 
       std::uint32_t frames;
       status = audio_client->GetBufferSize(&frames);
@@ -663,6 +693,8 @@ namespace platf::audio {
     }
 
   public:
+    // Destroy COM last, after the clients and event handles on this thread.
+    std::unique_ptr<co_init_t> process_com;
     handle_t audio_event;
 
     device_enum_t device_enum;
@@ -777,6 +809,14 @@ namespace platf::audio {
         };
       }
 
+      return mic;
+    }
+
+    std::unique_ptr<mic_t> microphone_for_process(const std::uint8_t *, int channels, std::uint32_t sample_rate, std::uint32_t frame_size, std::uint32_t pid) override {
+      auto mic = std::make_unique<mic_wasapi_t>();
+      if (mic->init(sample_rate, frame_size, channels, pid)) {
+        return nullptr;
+      }
       return mic;
     }
 
@@ -1166,7 +1206,7 @@ namespace platf {
 
     // Install Steam Streaming Speakers if needed. We do this during audio_control() to ensure
     // the sink information returned includes the new Steam Streaming Speakers device.
-    if (config::audio.install_steam_drivers && !control->find_device_id(control->match_steam_speakers())) {
+    if (config::audio.capture_mode != "process" && config::audio.install_steam_drivers && !control->find_device_id(control->match_steam_speakers())) {
       // This is best effort. Don't fail if it doesn't work.
       control->install_steam_audio_drivers();
     }
@@ -1185,7 +1225,7 @@ namespace platf {
     // If Steam Streaming Speakers are currently the default audio device,
     // change the default to something else (if another device is available).
     audio::audio_control_t audio_ctrl;
-    if (audio_ctrl.init() == 0) {
+    if (config::audio.capture_mode != "process" && audio_ctrl.init() == 0) {
       audio_ctrl.reset_default_device();
     }
 

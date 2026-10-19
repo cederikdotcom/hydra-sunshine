@@ -1993,6 +1993,7 @@ namespace stream {
       session->launch_session_id = launch_session.id;
 
       session->config = config;
+      session->config.audio.capture_target = launch_session.audio_capture_target;
 
       session->control.connect_data = launch_session.control_connect_data;
       session->control.feedback_queue = mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback);

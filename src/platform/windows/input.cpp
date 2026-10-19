@@ -22,7 +22,7 @@
 #include "src/logging.h"
 #include "src/platform/common.h"
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && !defined(SUNSHINE_HAS_SYNTHETIC_POINTER_DEVICE)
 DECLARE_HANDLE(HSYNTHETICPOINTERDEVICE);
 WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
 WINUSERAPI BOOL WINAPI InjectSyntheticPointerInput(HSYNTHETICPOINTERDEVICE device, CONST POINTER_TYPE_INFO *pointerInfo, UINT32 count);

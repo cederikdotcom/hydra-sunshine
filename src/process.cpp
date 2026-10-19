@@ -36,6 +36,7 @@
 
   // _SH constants for _wfsopen()
   #include <share.h>
+  #include <tlhelp32.h>
 #endif
 
 #define DEFAULT_APP_IMAGE_PATH SUNSHINE_ASSETS_DIR "/box.png"
@@ -258,6 +259,69 @@ namespace proc {
     fg.disable();
 
     return 0;
+  }
+
+  std::function<std::optional<std::uint32_t>()> proc_t::get_audio_capture_target() {
+#ifdef _WIN32
+    if (placebo || !_app_id || !_process_group) {
+      return {};
+    }
+    // Own a duplicate of this launch's job. Capture/reinitialization must not
+    // read proc_t concurrently with termination or accidentally follow a new app.
+    HANDLE duplicate = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), _process_group.native_handle(), GetCurrentProcess(), &duplicate, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+      return {};
+    }
+    auto job = std::shared_ptr<void>(duplicate, [](void *handle) {
+      CloseHandle(handle);
+    });
+    // Retain handles for selected job members until this session ends. Windows
+    // cannot recycle their PIDs between selection and asynchronous activation.
+    auto members_alive = std::make_shared<std::unordered_map<DWORD, std::shared_ptr<void>>>();
+    return [job, members_alive]() -> std::optional<std::uint32_t> {
+      auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+      if (snapshot == INVALID_HANDLE_VALUE) {
+        return std::nullopt;
+      }
+      auto close_snapshot = util::fail_guard([&]() {
+        CloseHandle(snapshot);
+      });
+      std::unordered_map<DWORD, DWORD> members;
+      PROCESSENTRY32 entry {};
+      entry.dwSize = sizeof(entry);
+      if (!Process32First(snapshot, &entry)) {
+        return std::nullopt;
+      }
+      do {
+        auto process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+        if (!process) {
+          continue;
+        }
+        BOOL in_job = FALSE;
+        if (IsProcessInJob(process, job.get(), &in_job) && in_job) {
+          members.emplace(entry.th32ProcessID, entry.th32ParentProcessID);
+          members_alive->try_emplace(entry.th32ProcessID, std::shared_ptr<void>(process, [](void *handle) {
+                                       CloseHandle(handle);
+                                     }));
+        } else {
+          CloseHandle(process);
+        }
+      } while (Process32Next(snapshot, &entry));
+      std::optional<std::uint32_t> root;
+      for (const auto &[pid, parent] : members) {
+        if (!members.contains(parent)) {
+          if (root) {
+            BOOST_LOG(error) << "Application job has multiple independent roots; refusing ambiguous audio capture";
+            return std::nullopt;
+          }
+          root = pid;
+        }
+      }
+      return root;
+    };
+#else
+    return {};
+#endif
   }
 
   int proc_t::running() {

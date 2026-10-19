@@ -149,6 +149,7 @@ namespace config {
     std::string virtual_sink;
     bool stream;
     bool install_steam_drivers;
+    std::string capture_mode;  ///< "device" (default) or Windows process-tree capture.
   };
 
   constexpr int ENCRYPTION_MODE_NEVER = 0;  // Never use video encryption, even if the client supports it
