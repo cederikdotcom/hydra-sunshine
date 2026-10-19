@@ -61,8 +61,25 @@ audio capture; it does not verify microphone input or a complete spoken dialogue
 
 An isolated fork server on chunky (port 49289) launched its own tone application,
 selected that application's PID, initialized 48 kHz stereo Opus, and streamed audio
-to a Mac Mini Moonlight client. The client received audio packets. The stock
-Sunshine instances and cosmic's active streams were left running.
+to a Mac Mini Moonlight client. SDL's disk audio backend recorded the decoded
+48 kHz stereo float samples while separate 880 and 1320 Hz processes were running.
+Median amplitudes over 25 ms windows were 0.08584651 (440 Hz), 0.00002128
+(880 Hz), and 0.00000642 (1320 Hz). Short windows avoid cancellation across packet
+loss/resynchronization discontinuities; a long-window single-bin measurement was
+unstable and was not used as a pass criterion. These figures characterize tone
+isolation, not network quality or audible glitching.
+
+Disconnect/reconnect selected the same application PID (8612). Before reconnect,
+median amplitudes were 0.08589802 / 0.00002255 / 0.00000651; after reconnect,
+0.08587300 / 0.00002293 / 0.00000631. The stock Sunshine instances and cosmic's
+active streams were left running.
+
+A GUI bootstrap which exited immediately after starting its child also passed:
+Sunshine selected the surviving child's PID (29996), and the decoded stream
+contained its 440 Hz tone. A `cmd /c start` wrapper produced multiple independent
+job roots; Sunshine logged the ambiguity and sent no audio. This is an intentional
+unsupported case, not a fallback to device capture. Launch one tracked application
+tree per slot, and keep `wait-all` enabled for bootstrapped applications.
 
 ## Rollout
 
