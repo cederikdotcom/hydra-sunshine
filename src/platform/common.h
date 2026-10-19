@@ -556,6 +556,11 @@ namespace platf {
 
     virtual std::unique_ptr<mic_t> microphone(const std::uint8_t *mapping, int channels, std::uint32_t sample_rate, std::uint32_t frame_size) = 0;
 
+    // Unsupported platforms fail closed: never substitute a shared system mix.
+    virtual std::unique_ptr<mic_t> microphone_for_process(const std::uint8_t *, int, std::uint32_t, std::uint32_t, std::uint32_t) {
+      return nullptr;
+    }
+
     /**
      * @brief Check if the audio sink is available in the system.
      * @param sink Sink to be checked.

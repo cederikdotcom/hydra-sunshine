@@ -93,6 +93,7 @@ namespace proc {
     std::vector<ctx_t> &get_apps();
     std::string get_app_image(int app_id);
     std::string get_last_run_app_name();
+    std::function<std::optional<std::uint32_t>()> get_audio_capture_target();
     void terminate();
 
   private:

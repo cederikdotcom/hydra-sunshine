@@ -2,6 +2,17 @@
 
 add_compile_definitions(SUNSHINE_PLATFORM="windows")
 
+# Newer MinGW SDKs declare synthetic pointer APIs themselves. Keep the
+# compatibility declarations only for SDKs which still lack the handle type.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("#define WINVER 0x0A00
+#include <windows.h>
+int main() { HSYNTHETICPOINTERDEVICE device = nullptr; return device != nullptr; }"
+        SUNSHINE_HAS_SYNTHETIC_POINTER_DEVICE)
+if(SUNSHINE_HAS_SYNTHETIC_POINTER_DEVICE)
+    list(APPEND SUNSHINE_DEFINITIONS SUNSHINE_HAS_SYNTHETIC_POINTER_DEVICE)
+endif()
+
 enable_language(RC)
 set(CMAKE_RC_COMPILER windres)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")

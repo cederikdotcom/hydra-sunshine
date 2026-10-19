@@ -45,6 +45,15 @@ const config = ref(props.config)
 
     <PlatformLayout :platform="platform">
       <template #windows>
+        <div class="mb-3">
+          <label for="audio_capture_mode" class="form-label">{{ $t('config.audio_capture_mode') }}</label>
+          <select id="audio_capture_mode" class="form-select" v-model="config.audio_capture_mode">
+            <option value="device">System audio</option>
+            <option value="process">Launched application only</option>
+          </select>
+          <div class="form-text">Requires Windows build 20348 or later. Application mode captures only the launched application and its children, without changing the system audio device.</div>
+        </div>
+
         <!-- Virtual Sink -->
         <div class="mb-3">
           <label for="virtual_sink" class="form-label">{{ $t('config.virtual_sink') }}</label>
