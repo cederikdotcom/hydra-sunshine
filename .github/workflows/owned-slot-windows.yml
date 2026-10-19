@@ -34,29 +34,38 @@ jobs:
             mingw-w64-ucrt-x86_64-nodejs mingw-w64-ucrt-x86_64-nsis
             mingw-w64-ucrt-x86_64-onevpl mingw-w64-ucrt-x86_64-openssl
             mingw-w64-ucrt-x86_64-opus mingw-w64-ucrt-x86_64-toolchain
-      - name: Configure and compile Windows binaries
+      - name: Configure and compile production Windows binaries
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_DOCS=OFF -DBUILD_TESTS=ON -DBUILD_WERROR=ON \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSUNSHINE_ASSETS_DIR=assets
-          cmake --build build --parallel 4
-      - name: Verify client identity reaches lifecycle hooks
-        working-directory: build/tests
-        run: ./test_sunshine.exe --gtest_filter=LaunchClientEnvironmentTest.* --gtest_output=xml:owned-slot-tests.xml
+          cmake --build build --target sunshine dxgi-info audio-info sunshinesvc web-ui --parallel 4
       - name: Package portable Windows candidate
         run: |
           mkdir -p artifacts
           (cd build && cpack -G ZIP)
           cp build/cpack_artifacts/Sunshine.zip artifacts/Sunshine-Windows-AMD64-owned-slots.zip
-          cp build/tests/owned-slot-tests.xml artifacts/
           printf '{"commit":"%s","version":"%s","scope":"Windows test artifact; no global release"}\n' "$COMMIT" "$BUILD_VERSION" > artifacts/manifest.json
           (cd artifacts && sha256sum Sunshine-Windows-AMD64-owned-slots.zip > SHA256SUMS)
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - name: Preserve production candidate before test compilation
+        uses: actions/upload-artifact@v4
         with:
           name: sunshine-owned-slots-windows-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+      - name: Compile test harness
+        run: cmake --build build --target test_sunshine --parallel 4
+      - name: Verify client identity reaches lifecycle hooks
+        working-directory: build/tests
+        run: ./test_sunshine.exe --gtest_filter=LaunchClientEnvironmentTest.* --gtest_output=xml:owned-slot-tests.xml
+      - name: Preserve test results and executable
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sunshine-owned-slots-tests-${{ github.sha }}
           path: |
-            artifacts/
+            build/sunshine.exe
+            build/tests/test_sunshine.exe
             build/tests/owned-slot-tests.xml
             build/tests/test_sunshine.log
           if-no-files-found: warn
