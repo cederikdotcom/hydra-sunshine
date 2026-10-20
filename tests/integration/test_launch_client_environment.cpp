@@ -7,6 +7,7 @@
 #include "src/process.h"
 
 #include <optional>
+#include <string_view>
 
 namespace nvhttp {
   // Exercise the production request decoder without starting an HTTP server.
@@ -44,7 +45,14 @@ TEST(LaunchClientEnvironmentTest, EachLaunchReplacesTheHookEnvironmentOwner) {
   proc::proc_t process {std::move(env), {app}};
   for (const auto &id : {"android-client", "windows-client", ""}) {
     ASSERT_EQ(process.execute(1, launch_request(id)), 0);
-    EXPECT_EQ(process.get_env().at("SUNSHINE_CLIENT_UUID").to_string(), id);
+    const auto &current = process.get_env();
+    // Boost may remove a variable assigned an empty value. Both absent and
+    // empty identities must clear the previous owner before lifecycle hooks.
+    if (std::string_view {id}.empty()) {
+      EXPECT_TRUE(current.count("SUNSHINE_CLIENT_UUID") == 0 || current.at("SUNSHINE_CLIENT_UUID").to_string().empty());
+    } else {
+      EXPECT_EQ(current.at("SUNSHINE_CLIENT_UUID").to_string(), id);
+    }
     process.terminate();
   }
 }
