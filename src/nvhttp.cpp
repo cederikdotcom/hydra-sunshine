@@ -509,7 +509,7 @@ namespace nvhttp {
       }
       x++;
     }
-    launch_session->unique_id = (get_arg(args, "uniqueid", "unknown"));
+    launch_session->unique_id = get_arg(args, "uniqueid", "");
     launch_session->appid = (int) util::from_view(get_arg(args, "appid", "unknown"));
     launch_session->enable_sops = util::from_view(get_arg(args, "sops", "0"));
     launch_session->surround_info = (int) util::from_view(get_arg(args, "surroundAudioInfo", "196610"));
