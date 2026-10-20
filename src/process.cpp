@@ -191,6 +191,8 @@ namespace proc {
     // Add Stream-specific environment variables
     _env["SUNSHINE_APP_ID"] = std::to_string(_app_id);
     _env["SUNSHINE_APP_NAME"] = _app.name;
+    // A missing request identity must clear any previous owner before hooks run.
+    _env["SUNSHINE_CLIENT_UUID"] = launch_session->unique_id;
     _env["SUNSHINE_CLIENT_NAME"] = launch_session->client_name;
     _env["SUNSHINE_CLIENT_WIDTH"] = std::to_string(launch_session->width);
     _env["SUNSHINE_CLIENT_HEIGHT"] = std::to_string(launch_session->height);
